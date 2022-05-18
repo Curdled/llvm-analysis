@@ -112,6 +112,7 @@
 #include <cassert>
 #include <cstdint>
 #include <iterator>
+#include <iostream>
 #include <map>
 #include <memory>
 #include <set>
@@ -652,6 +653,9 @@ class NewGVN {
   // Deletion info.
   SmallPtrSet<Instruction *, 8> InstructionsToErase;
 
+  std::map<Function *, std::vector<std::vector<Instruction *>>> *classInstructions = 
+    new std::map<Function *, std::vector<std::vector<Instruction *>>>;
+
 public:
   NewGVN(Function &F, DominatorTree *DT, AssumptionCache *AC,
          TargetLibraryInfo *TLI, AliasAnalysis *AA, MemorySSA *MSSA,
@@ -833,6 +837,8 @@ private:
   MemoryAccess *getDefiningAccess(const MemoryAccess *) const;
   MemoryPhi *getMemoryAccess(const BasicBlock *) const;
   template <class T, class Range> T *getMinDFSOfRange(const Range &) const;
+  
+  void printInfo(Function &F);
 
   unsigned InstrToDFSNum(const Value *V) const {
     assert(isa<Instruction>(V) && "This should not be used for MemoryAccesses");
@@ -3278,6 +3284,43 @@ void NewGVN::verifyMemoryCongruency() const {
 #endif
 }
 
+void NewGVN::printInfo(Function &F) {
+  if(classInstructions  == nullptr) return;
+
+  auto FF = &F;
+  auto &cI = (*classInstructions)[FF];
+
+  cI.resize(CongruenceClasses.size());
+
+  std::cout << F.getName().str() << std::endl;
+  for (auto *CC : CongruenceClasses) {
+    std::cout << "dumping: " << CC->getID() << std::endl;
+    cI[CC->getID()] = std::vector<Instruction *>();  
+    for (auto *CCM : *CC) {
+      auto inst = dyn_cast<Instruction>(CCM);
+      cI[CC->getID()].push_back(inst);
+      inst->dump();
+    }
+    for (auto *CCM : CC->memory()) {
+      CCM->dump();
+    }
+  }
+
+  for(auto &[k,v] : *classInstructions) {
+    std::cout << k->getName().str() << std::endl;
+    for(std::size_t i = 0, e = v.size(); i != e; ++i) {
+      auto C = v[i];
+    // for(auto C : v) {
+      std::cout << i << std::endl;
+      for (auto CE : C) {
+        CE->dump();
+      }
+      std::cout << "--" << std::endl;
+    }
+  }
+
+}
+
 // Verify that the sparse propagation we did actually found the maximal fixpoint
 // We do this by storing the value to class mapping, touching all instructions,
 // and redoing the iteration to see if anything changed.
@@ -3435,6 +3478,8 @@ bool NewGVN::runGVN() {
   MSSAWalker = MSSA->getWalker();
   SingletonDeadExpression = new (ExpressionAllocator) DeadExpression();
 
+  std::cout << "runGVN" << std::endl;
+
   // Count number of instructions for sizing of hash tables, and come
   // up with a global dfs numbering for instructions.
   unsigned ICount = 1;
@@ -3491,6 +3536,8 @@ bool NewGVN::runGVN() {
   verifyMemoryCongruency();
   verifyIterationSettled(F);
   verifyStoreExpressions();
+
+  printInfo(F);
 
   Changed |= eliminateInstructions(F);
 
