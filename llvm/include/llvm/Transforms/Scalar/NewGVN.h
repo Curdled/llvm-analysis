@@ -17,14 +17,29 @@
 
 #include "llvm/IR/PassManager.h"
 
+
 namespace llvm {
 
 class Function;
+class DominatorTree;
+class AssumptionCache;
+class TargetLibraryInfo;
+class MemorySSA;
+class AAResults;
+class DataLayout;
 
 class NewGVNPass : public PassInfoMixin<NewGVNPass> {
 public:
   /// Run the pass over the function.
   PreservedAnalyses run(Function &F, AnalysisManager<Function> &AM);
+};
+
+
+class NewGVNExtractor {
+  public:
+    std::unique_ptr<std::vector<std::vector<Instruction *>>> extract(Function &F, DominatorTree *DT, AssumptionCache *AC,
+         TargetLibraryInfo *TLI, llvm::AAResults *AA, MemorySSA *MSSA,
+         const DataLayout &DL);
 };
 
 } // end namespace llvm

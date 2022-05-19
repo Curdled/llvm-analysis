@@ -653,8 +653,8 @@ class NewGVN {
   // Deletion info.
   SmallPtrSet<Instruction *, 8> InstructionsToErase;
 
-  std::map<Function *, std::vector<std::vector<Instruction *>>> *classInstructions = 
-    new std::map<Function *, std::vector<std::vector<Instruction *>>>;
+  std::vector<std::vector<Instruction *>> *classInstructions = 
+    new std::vector<std::vector<Instruction *>>;
 
 public:
   NewGVN(Function &F, DominatorTree *DT, AssumptionCache *AC,
@@ -665,6 +665,7 @@ public:
         SQ(DL, TLI, DT, AC, /*CtxI=*/nullptr, /*UseInstrInfo=*/false) {}
 
   bool runGVN();
+  bool runGVN(std::vector<std::vector<Instruction *>> *);
 
 private:
   // Expression handling.
@@ -3288,36 +3289,36 @@ void NewGVN::printInfo(Function &F) {
   if(classInstructions  == nullptr) return;
 
   auto FF = &F;
-  auto &cI = (*classInstructions)[FF];
+  auto &cI = *classInstructions;
 
   cI.resize(CongruenceClasses.size());
 
-  std::cout << F.getName().str() << std::endl;
+  // std::cout << F.getName().str() << std::endl;
   for (auto *CC : CongruenceClasses) {
-    std::cout << "dumping: " << CC->getID() << std::endl;
+    // std::cout << "dumping: " << CC->getID() << std::endl;
     cI[CC->getID()] = std::vector<Instruction *>();  
     for (auto *CCM : *CC) {
       auto inst = dyn_cast<Instruction>(CCM);
       cI[CC->getID()].push_back(inst);
-      inst->dump();
+      // inst->dump();
     }
     for (auto *CCM : CC->memory()) {
-      CCM->dump();
+      // CCM->dump();
     }
   }
 
-  for(auto &[k,v] : *classInstructions) {
-    std::cout << k->getName().str() << std::endl;
-    for(std::size_t i = 0, e = v.size(); i != e; ++i) {
-      auto C = v[i];
-    // for(auto C : v) {
-      std::cout << i << std::endl;
-      for (auto CE : C) {
-        CE->dump();
-      }
-      std::cout << "--" << std::endl;
-    }
-  }
+  // for(auto &[k,v] : *classInstructions) {
+    // std::cout << F.getName().str() << std::endl;
+    // for(std::size_t i = 0, e = cI.size(); i != e; ++i) {
+    //   auto C = cI[i];
+    // // for(auto C : v) {
+    //   // std::cout << i << std::endl;
+    //   for (auto CE : C) {
+    //     CE->dump();
+    //   }
+    //   // std::cout << "--" << std::endl;
+    // }
+  // }
 
 }
 
@@ -3469,6 +3470,12 @@ void NewGVN::iterateTouchedInstructions() {
   NumGVNMaxIterations = std::max(NumGVNMaxIterations.getValue(), Iterations);
 }
 
+bool NewGVN::runGVN(std::vector<std::vector<Instruction *>>*v) {
+  classInstructions = v;
+  runGVN();
+  classInstructions = nullptr;
+}
+
 // This is the main transformation entry point.
 bool NewGVN::runGVN() {
   if (DebugCounter::isCounterSet(VNCounter))
@@ -3477,8 +3484,6 @@ bool NewGVN::runGVN() {
   NumFuncArgs = F.arg_size();
   MSSAWalker = MSSA->getWalker();
   SingletonDeadExpression = new (ExpressionAllocator) DeadExpression();
-
-  std::cout << "runGVN" << std::endl;
 
   // Count number of instructions for sizing of hash tables, and come
   // up with a global dfs numbering for instructions.
@@ -3539,30 +3544,32 @@ bool NewGVN::runGVN() {
 
   printInfo(F);
 
-  Changed |= eliminateInstructions(F);
+  // PredInfo->
 
-  // Delete all instructions marked for deletion.
-  for (Instruction *ToErase : InstructionsToErase) {
-    if (!ToErase->use_empty())
-      ToErase->replaceAllUsesWith(UndefValue::get(ToErase->getType()));
+  // Changed |= eliminateInstructions(F);
 
-    assert(ToErase->getParent() &&
-           "BB containing ToErase deleted unexpectedly!");
-    ToErase->eraseFromParent();
-  }
-	Changed |= !InstructionsToErase.empty();
+  // // Delete all instructions marked for deletion.
+  // for (Instruction *ToErase : InstructionsToErase) {
+  //   if (!ToErase->use_empty())
+  //     ToErase->replaceAllUsesWith(UndefValue::get(ToErase->getType()));
 
-  // Delete all unreachable blocks.
-  auto UnreachableBlockPred = [&](const BasicBlock &BB) {
-    return !ReachableBlocks.count(&BB);
-  };
+  //   assert(ToErase->getParent() &&
+  //          "BB containing ToErase deleted unexpectedly!");
+  //   ToErase->eraseFromParent();
+  // }
+	// Changed |= !InstructionsToErase.empty();
 
-  for (auto &BB : make_filter_range(F, UnreachableBlockPred)) {
-    LLVM_DEBUG(dbgs() << "We believe block " << getBlockName(&BB)
-                      << " is unreachable\n");
-    deleteInstructionsInBlock(&BB);
-    Changed = true;
-  }
+  // // Delete all unreachable blocks.
+  // auto UnreachableBlockPred = [&](const BasicBlock &BB) {
+  //   return !ReachableBlocks.count(&BB);
+  // };
+
+  // for (auto &BB : make_filter_range(F, UnreachableBlockPred)) {
+  //   LLVM_DEBUG(dbgs() << "We believe block " << getBlockName(&BB)
+  //                     << " is unreachable\n");
+  //   deleteInstructionsInBlock(&BB);
+  //   Changed = true;
+  // }
 
   cleanupTables();
   return Changed;
@@ -4314,3 +4321,31 @@ PreservedAnalyses NewGVNPass::run(Function &F, AnalysisManager<Function> &AM) {
   PA.preserve<GlobalsAA>();
   return PA;
 }
+
+// (Function &F, DominatorTree *DT, AssumptionCache *AC,
+//          TargetLibraryInfo *TLI, AliasAnalysis *AA, MemorySSA *MSSA,
+//          const DataLayout &DL)
+
+// namespace llvm {
+
+std::unique_ptr<std::vector<std::vector<Instruction *>>> 
+llvm::NewGVNExtractor::extract(
+  Function &F, 
+  DominatorTree *DT, 
+  AssumptionCache *AC,
+  TargetLibraryInfo *TLI, 
+  AAResults *AA, 
+  MemorySSA *MSSA,
+  const DataLayout &DL) {
+  auto v = make_unique<std::vector<std::vector<Instruction *>>>();
+  // intentional memory leak!
+  auto gvn = new NewGVN(F, DT, AC, TLI, AA, MSSA, DL);
+
+  gvn->runGVN(v.get());
+
+  return std::move(v);
+}
+
+
+
+// }
