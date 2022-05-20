@@ -34,10 +34,15 @@ public:
   PreservedAnalyses run(Function &F, AnalysisManager<Function> &AM);
 };
 
+struct GVNEXtractedData {
+  std::vector<std::vector<Instruction *>> classAssignment;
+  std::vector<Instruction *> eraseSimpleInstructions;
+  int topClass;
+};
 
 class NewGVNExtractor {
   public:
-    std::unique_ptr<std::vector<std::vector<Instruction *>>> extract(Function &F, DominatorTree *DT, AssumptionCache *AC,
+    std::unique_ptr<GVNEXtractedData> extract(Function &F, DominatorTree *DT, AssumptionCache *AC,
          TargetLibraryInfo *TLI, llvm::AAResults *AA, MemorySSA *MSSA,
          const DataLayout &DL);
 };
