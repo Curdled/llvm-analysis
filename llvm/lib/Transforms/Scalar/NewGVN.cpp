@@ -653,7 +653,7 @@ class NewGVN {
   // Deletion info.
   SmallPtrSet<Instruction *, 8> InstructionsToErase;
 
-  GVNEXtractedData *extractedData = nullptr;
+  GVNEXtractedData *dataExtractor = nullptr;
 
 public:
   NewGVN(Function &F, DominatorTree *DT, AssumptionCache *AC,
@@ -3285,17 +3285,19 @@ void NewGVN::verifyMemoryCongruency() const {
 }
 
 void NewGVN::printInfo(Function &F) {
-  if(extractedData  == nullptr) return;
+  if(dataExtractor  == nullptr) return;
 
-  auto FF = &F;
-  auto &cI = extractedData->classAssignment;
+  dataExtractor->handleTopClass(&F, TOPClass->getID());
 
-  cI.resize(CongruenceClasses.size());
+  // auto FF = &F;
+  // auto &cI = dataExtractor->classAssignment;
 
-  std::cout << F.getName().str() << std::endl;
+  // cI.resize(CongruenceClasses.size());
+
+  // std::cout << F.getName().str() << std::endl;
   for (auto *CC : CongruenceClasses) {
-    std::cout << "dumping: " << CC->getID() << std::endl;
-    cI[CC->getID()] = std::vector<Instruction *>();  
+    // std::cout << "dumping: " << CC->getID() << std::endl;
+    // cI[CC->getID()] = std::vector<Instruction *>();  
     for (auto *CCM : *CC) {
       auto inst = dyn_cast<Instruction>(CCM);
       if(inst == nullptr) {
@@ -3304,27 +3306,26 @@ void NewGVN::printInfo(Function &F) {
         outs() << "\n";
         outs().flush();
       }
-      cI[CC->getID()].push_back(inst);
-      inst->dump();
+      dataExtractor->handleClassAssignment(&F, CC->getID(), inst);
+      // cI[CC->getID()].push_back(inst);
+      // inst->dump();
     }
-    for (auto *CCM : CC->memory()) {
-      CCM->dump();
-    }
+    // for (auto *CCM : CC->memory()) {
+    //   CCM->dump();
+    // }
   }
+  outs() << "done handleClassAssignment\n";
+  outs().flush();
 
-  std::cout << F.getName().str() << std::endl;
-  for(std::size_t i = 0, e = cI.size(); i != e; ++i) {
-    auto C = cI[i];
-    for (auto CE : C) {
-      CE->dump();
-    }
-  }
 
   for(auto *I: InstructionsToErase) {
-    extractedData->eraseSimpleInstructions.push_back(I);
-    outs() << "erase: " << *I << "\n";
-    outs().flush();
+    // dataExtractor->deadInstructions.push_back(I);
+    dataExtractor->handleDeadInstruction(I);
+    // outs() << "erase: " << *I << "\n";
+    // outs().flush();
   }
+  outs() << "done InstructionsToErase\n";
+  outs().flush();
 }
 
 // Verify that the sparse propagation we did actually found the maximal fixpoint
@@ -3476,9 +3477,9 @@ void NewGVN::iterateTouchedInstructions() {
 }
 
 bool NewGVN::runGVN(GVNEXtractedData *v) {
-  extractedData = v;
+  dataExtractor = v;
   runGVN();
-  extractedData = nullptr;
+  dataExtractor = nullptr;
 }
 
 // This is the main transformation entry point.
@@ -3548,8 +3549,6 @@ bool NewGVN::runGVN() {
   verifyStoreExpressions();
 
   printInfo(F);
-  if(extractedData != nullptr) return Changed;
-
 
   Changed |= eliminateInstructions(F);
 
@@ -3780,6 +3779,10 @@ void NewGVN::deleteInstructionsInBlock(BasicBlock *BB) {
     if (isa<LandingPadInst>(Inst))
       continue;
 
+    if(dataExtractor != nullptr) {
+      dataExtractor->handleDeadInstruction(&Inst);
+    }
+
     Inst.eraseFromParent();
     ++NumGVNInstrDeleted;
   }
@@ -3793,6 +3796,8 @@ void NewGVN::deleteInstructionsInBlock(BasicBlock *BB) {
 void NewGVN::markInstructionForDeletion(Instruction *I) {
   LLVM_DEBUG(dbgs() << "Marking " << *I << " for deletion\n");
   InstructionsToErase.insert(I);
+  if(dataExtractor == nullptr) return;
+  dataExtractor->handleDeadInstruction(I);
 }
 
 void NewGVN::replaceInstruction(Instruction *I, Value *V) {
@@ -4335,9 +4340,9 @@ PreservedAnalyses NewGVNPass::run(Function &F, AnalysisManager<Function> &AM) {
 
 // namespace llvm {
 
+llvm::NewGVNExtractor::NewGVNExtractor(std::unique_ptr<GVNEXtractedData> ext) : extractor(std::move(ext)){}
 
-
-std::unique_ptr<GVNEXtractedData> 
+void 
 llvm::NewGVNExtractor::extract(
   Function &F, 
   DominatorTree *DT, 
@@ -4346,13 +4351,12 @@ llvm::NewGVNExtractor::extract(
   AAResults *AA, 
   MemorySSA *MSSA,
   const DataLayout &DL) {
-  auto v = make_unique<GVNEXtractedData>();
-  // intentional memory leak!
+
   auto gvn = new NewGVN(F, DT, AC, TLI, AA, MSSA, DL);
 
-  gvn->runGVN(v.get());
+  gvn->runGVN(extractor.get());
 
-  return std::move(v);
+  return;
 }
 
 

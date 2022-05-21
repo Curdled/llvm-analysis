@@ -35,17 +35,32 @@ public:
 };
 
 struct GVNEXtractedData {
-  std::vector<std::vector<Instruction *>> classAssignment;
-  std::vector<Instruction *> eraseSimpleInstructions;
-  int topClass;
+  using ClassID = unsigned int;
+
+  using HandleTopClassT = std::function<void(Function *, ClassID)>;
+  using HandleClassAssignmentT = std::function<void(Function *, ClassID, Instruction *)>;
+  using HandleDeadInstructionT = std::function<void(Instruction *)>;
+
+  GVNEXtractedData(HandleTopClassT tc, HandleClassAssignmentT ca, HandleDeadInstructionT di) 
+    : handleTopClass(tc), handleClassAssignment(ca), handleDeadInstruction(di) {}
+
+
+  HandleTopClassT handleTopClass;
+  HandleClassAssignmentT handleClassAssignment;
+  HandleDeadInstructionT handleDeadInstruction;
 };
 
 class NewGVNExtractor {
   public:
-    std::unique_ptr<GVNEXtractedData> extract(Function &F, DominatorTree *DT, AssumptionCache *AC,
+    NewGVNExtractor(std::unique_ptr<GVNEXtractedData>);
+    void extract(Function &F, DominatorTree *DT, AssumptionCache *AC,
          TargetLibraryInfo *TLI, llvm::AAResults *AA, MemorySSA *MSSA,
          const DataLayout &DL);
+
+  private: 
+    std::unique_ptr<GVNEXtractedData> extractor;
 };
+
 
 } // end namespace llvm
 
