@@ -16,17 +16,25 @@
 #define LLVM_TRANSFORMS_SCALAR_NEWGVN_H
 
 #include "llvm/IR/PassManager.h"
-
+#include "llvm/IR/Dominators.h"
+ 
 
 namespace llvm {
 
 class Function;
+class BasicBlock;
+
 class DominatorTree;
 class AssumptionCache;
 class TargetLibraryInfo;
 class MemorySSA;
 class AAResults;
 class DataLayout;
+// template<class T>
+// class DomTreeNodeBas?e<T>;
+// template<>
+// class DomTreeNodeBase<BasicBlock, false>;
+// class DomTreeNode;
 
 class NewGVNPass : public PassInfoMixin<NewGVNPass> {
 public:
@@ -38,16 +46,21 @@ struct GVNEXtractedData {
   using ClassID = unsigned int;
 
   using HandleTopClassT = std::function<void(Function *, ClassID)>;
-  using HandleClassAssignmentT = std::function<void(Function *, ClassID, Instruction *)>;
+  using HandleClassAssignmentT = std::function<void(Function *, ClassID, Instruction *, DomTreeNode *)>;
   using HandleDeadInstructionT = std::function<void(Instruction *)>;
+  using HandleInstructionLeaderT = std::function<void(ClassID, Instruction*, unsigned)>;
+  using HandleValueLeaderT = std::function<void(ClassID, Value*, unsigned)>;
 
-  GVNEXtractedData(HandleTopClassT tc, HandleClassAssignmentT ca, HandleDeadInstructionT di) 
-    : handleTopClass(tc), handleClassAssignment(ca), handleDeadInstruction(di) {}
+
+  GVNEXtractedData(HandleTopClassT tc, HandleClassAssignmentT ca, HandleDeadInstructionT di, HandleInstructionLeaderT il, HandleValueLeaderT vl) 
+    : handleTopClass(tc), handleClassAssignment(ca), handleDeadInstruction(di), handleInstructionLeader(il),  handleValueLeader(vl) {}
 
 
   HandleTopClassT handleTopClass;
   HandleClassAssignmentT handleClassAssignment;
   HandleDeadInstructionT handleDeadInstruction;
+  HandleInstructionLeaderT handleInstructionLeader;
+  HandleValueLeaderT handleValueLeader;
 };
 
 class NewGVNExtractor {

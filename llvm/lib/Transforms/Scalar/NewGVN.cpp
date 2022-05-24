@@ -3289,6 +3289,8 @@ void NewGVN::printInfo(Function &F) {
 
   dataExtractor->handleTopClass(&F, TOPClass->getID());
 
+  // DT->viewGraph();
+
   // auto FF = &F;
   // auto &cI = dataExtractor->classAssignment;
 
@@ -3298,6 +3300,15 @@ void NewGVN::printInfo(Function &F) {
   for (auto *CC : CongruenceClasses) {
     // std::cout << "dumping: " << CC->getID() << std::endl;
     // cI[CC->getID()] = std::vector<Instruction *>();  
+    auto leader =  CC->getLeader();
+    if (leader != nullptr) {
+      if(auto leaderInst = dyn_cast<Instruction>(leader); leader != nullptr) {
+        dataExtractor->handleInstructionLeader(CC->getID(), leaderInst, InstrDFS.lookup(leader));
+      } else {
+          dataExtractor->handleValueLeader(CC->getID(), leader, InstrDFS.lookup(leader));
+      }
+    }
+    
     for (auto *CCM : *CC) {
       auto inst = dyn_cast<Instruction>(CCM);
       if(inst == nullptr) {
@@ -3306,9 +3317,16 @@ void NewGVN::printInfo(Function &F) {
         outs() << "\n";
         outs().flush();
       }
-      dataExtractor->handleClassAssignment(&F, CC->getID(), inst);
-      // cI[CC->getID()].push_back(inst);
-      // inst->dump();
+      else {
+        if (inst->getParent() != nullptr) {
+          dataExtractor->handleClassAssignment(&F, CC->getID(), inst, DT->getNode(inst->getParent()));
+          // dataExtractor->handleClassAssignment(&F, CC->getID(), inst, 0);
+       
+        }
+      }
+
+
+
     }
     // for (auto *CCM : CC->memory()) {
     //   CCM->dump();
